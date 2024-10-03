@@ -57,14 +57,26 @@ if len(ticket_rows) > 0:
     
     for row in ticket_rows:
         try:
-            ticket_number = row.find_element(By.XPATH, ".//span[@class='listview-display-id']").text
-            subject = row.find_element(By.XPATH, ".//td[contains(@class, 'wo-subject')]").text
-            technician_or_status = row.find_element(By.XPATH, ".//td[@title]").text
-            print(f"Ticket Number: {ticket_number}, Subject: {subject}, Technician/Status: {technician_or_status}")
+            reply_icon = row.find_elements(By.XPATH, ".//div[contains(@class, 'listicon replyicon_REQ_REPLY')]")
+            
+            if reply_icon:
+                ticket_number = row.find_element(By.XPATH, ".//span[@class='listview-display-id']").text
+                subject = row.find_element(By.XPATH, ".//td[contains(@class, 'wo-subject')]").text
+                technician_or_status = row.find_element(By.XPATH, ".//td[@title]").text
+                
+                print(f"Ticket Number: {ticket_number}, Subject: {subject}, Technician/Status: {technician_or_status}")
+                
         except Exception as e:
             print(f"Error processing row: {e}")
 else:
     print("No rows found.")
 
+ticket_to_ans = input("\nEnter the ticket number you would like the AI to reply to: ")
+
+# Now, based on the selected ticket, you can add logic to automate the reply action
+
+
+
+# Keep the browser open for 100 seconds before closing it
 time.sleep(100)
 driver.quit()
