@@ -1,9 +1,9 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 from dotenv import load_dotenv
 import os
 import time
@@ -73,10 +73,38 @@ else:
 
 ticket_to_ans = input("\nEnter the ticket number you would like the AI to reply to: ")
 
-# Now, based on the selected ticket, you can add logic to automate the reply action
+# Adding a 5-second pause after the user input
+time.sleep(5)
 
+try:
+    ticket_link = driver.find_element(By.XPATH, f"//span[@class='listview-display-id' and text()='{ticket_to_ans}']")
+    ticket_link.click()
+    
+    print(f"Successfully clicked on ticket {ticket_to_ans}.")
 
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.XPATH, "//div[@class='conversation-info']"))
+    )
+    print(f"Loaded the conversation for ticket {ticket_to_ans}.")
 
-# Keep the browser open for 100 seconds before closing it
+    conversation_blocks = driver.find_elements(By.XPATH, "//div[@class='conversation-info']")
+
+    if len(conversation_blocks) > 0:
+        print(f"Found {len(conversation_blocks)} conversation entries.")
+        
+        for block in conversation_blocks:
+            try:
+                paragraphs = block.find_elements(By.XPATH, ".//p")
+                full_message = "\n".join([p.text for p in paragraphs])
+                
+                print(f"Message content:\n{full_message}\n")
+            except Exception as e:
+                print(f"Error processing conversation entry: {e}")
+    else:
+        print("No conversations found.")
+
+except Exception as e:
+    print(f"Error: Could not navigate to ticket {ticket_to_ans} or scrape the data. {e}")
+
 time.sleep(100)
 driver.quit()
