@@ -2,6 +2,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from dotenv import load_dotenv
 import os
 import time
@@ -38,14 +40,31 @@ button.click()
 
 time.sleep(5)
 
-ticket_rows = driver.find_elements(By.XPATH, "//tr[contains(@class, 'sdpTable.requestlistview_row')]")
+try:
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.XPATH, "//tr[contains(@class, 'sdpTable requestlistview_row')]"))
+    )
+    print("Table rows are now visible, proceeding to read the data.")
+except Exception as e:
+    print(f"Error: The table rows did not load in time. {e}")
+    driver.quit()
+    exit()
 
-for row in ticket_rows:
-    ticket_number = row.find_element(By.XPATH, ".//td[2]").text  # Assuming ticket number is in the 2nd column
-    subject = row.find_element(By.XPATH, ".//td[3]").text  # Assuming subject is in the 3rd column
-    technician = row.find_element(By.XPATH, ".//td[4]").text  # Assuming technician is in the 4th column
-    print(f"Ticket Number: {ticket_number}, Subject: {subject}, Technician: {technician}")
+ticket_rows = driver.find_elements(By.XPATH, "//tr[contains(@class, 'sdpTable requestlistview_row')]")
+
+if len(ticket_rows) > 0:
+    print(f"Found {len(ticket_rows)} rows.")
+    
+    for row in ticket_rows:
+        try:
+            ticket_number = row.find_element(By.XPATH, ".//span[@class='listview-display-id']").text
+            subject = row.find_element(By.XPATH, ".//td[contains(@class, 'wo-subject')]").text
+            technician_or_status = row.find_element(By.XPATH, ".//td[@title]").text
+            print(f"Ticket Number: {ticket_number}, Subject: {subject}, Technician/Status: {technician_or_status}")
+        except Exception as e:
+            print(f"Error processing row: {e}")
+else:
+    print("No rows found.")
 
 time.sleep(100)
-
 driver.quit()
