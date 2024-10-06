@@ -1,45 +1,50 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 from dotenv import load_dotenv
 import os
 import time
 
+# Load environment variables (for email and password)
 load_dotenv()
 
+# Set up Chrome WebDriver
 current_directory = os.getcwd()
-
 chromedriver_path = os.path.join(current_directory, "chromedriver")
-
 service = Service(executable_path=chromedriver_path)
 driver = webdriver.Chrome(service=service)
 
+# Open the target page
 driver.get("https://ask2lit.lassonde.yorku.ca/app/itdesk/ui/requests")
 
+# Allow the page to load
 time.sleep(2)
 
+# Login process
 email = os.getenv("LOGIN_EMAIL")
 password = os.getenv("LOGIN_PASSWORD")
 
 email_input = driver.find_element(By.ID, "login_id")
 email_input.send_keys(email)
 
+# Click "Next" button
 button = driver.find_element(By.ID, "nextbtn")
 button.click()
 
+# Wait and enter password
 time.sleep(2)
-
 password_field = driver.find_element(By.ID, "password")
 password_field.send_keys(password)
-
 button = driver.find_element(By.ID, "nextbtn")
 button.click()
 
+# Wait for the page to load after login
 time.sleep(5)
 
+# Wait for the table rows to be visible
 try:
     WebDriverWait(driver, 10).until(
         EC.visibility_of_element_located((By.XPATH, "//tr[contains(@class, 'sdpTable requestlistview_row')]"))
@@ -50,6 +55,7 @@ except Exception as e:
     driver.quit()
     exit()
 
+# Get ticket rows
 ticket_rows = driver.find_elements(By.XPATH, "//tr[contains(@class, 'sdpTable requestlistview_row')]")
 
 if len(ticket_rows) > 0:
@@ -71,40 +77,62 @@ if len(ticket_rows) > 0:
 else:
     print("No rows found.")
 
-ticket_to_ans = input("\nEnter the ticket number you would like the AI to reply to: ")
+# Get ticket number input, and ensure a valid input is provided
+ticket_to_ans = input("\nEnter the ticket number you would like the AI to reply to: ").strip()
 
-# Adding a 5-second pause after the user input
-time.sleep(5)
+# Ensure the input is not empty
+while not ticket_to_ans:
+    print("Error: Ticket number cannot be empty. Please try again.")
+    ticket_to_ans = input("\nEnter the ticket number you would like the AI to reply to: ").strip()
 
 try:
+    # Click on the specified ticket
     ticket_link = driver.find_element(By.XPATH, f"//span[@class='listview-display-id' and text()='{ticket_to_ans}']")
     ticket_link.click()
     
     print(f"Successfully clicked on ticket {ticket_to_ans}.")
+    time.sleep(5)
 
-    WebDriverWait(driver, 10).until(
-        EC.visibility_of_element_located((By.XPATH, "//div[@class='conversation-info']"))
-    )
-    print(f"Loaded the conversation for ticket {ticket_to_ans}.")
+    # Debug: Check if the page changed after the click
+    print("Waiting for shadow DOM content...")
 
-    conversation_blocks = driver.find_elements(By.XPATH, "//div[@class='conversation-info']")
+    # Try to find the shadow DOM host
+    try:
+        shadow_host = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.ID, "notiDesc_71651000024499425"))  # Ensure this ID is correct
+        )
+        print("Found shadow DOM host.")
+    except Exception as e:
+        print(f"Error: Could not find the shadow DOM host: {e}")
+        driver.quit()
+        exit()
 
-    if len(conversation_blocks) > 0:
-        print(f"Found {len(conversation_blocks)} conversation entries.")
+    # Use JavaScript to access the shadow root
+    try:
+        shadow_root = driver.execute_script("return arguments[0].shadowRoot", shadow_host)
+        print("Successfully accessed shadow root.")
+    except Exception as e:
+        print(f"Error: Could not access shadow root: {e}")
+        driver.quit()
+        exit()
+
+    # Scrape paragraphs with class 'MsoNormal' inside the shadow DOM
+    try:
+        paragraphs = shadow_root.find_elements(By.CSS_SELECTOR, "p.MsoNormal")
         
-        for block in conversation_blocks:
-            try:
-                paragraphs = block.find_elements(By.XPATH, ".//p")
-                full_message = "\n".join([p.text for p in paragraphs])
-                
-                print(f"Message content:\n{full_message}\n")
-            except Exception as e:
-                print(f"Error processing conversation entry: {e}")
-    else:
-        print("No conversations found.")
-
+        # Print the text content of each paragraph
+        if paragraphs:
+            print(f"Found {len(paragraphs)} paragraphs.")
+            for p in paragraphs:
+                print(p.text)
+        else:
+            print("No paragraphs found inside the shadow DOM.")
+    except Exception as e:
+        print(f"Error while extracting paragraphs from shadow DOM: {e}")
+    
 except Exception as e:
     print(f"Error: Could not navigate to ticket {ticket_to_ans} or scrape the data. {e}")
 
+# Wait for a while before quitting (for debugging purposes)
 time.sleep(100)
 driver.quit()
