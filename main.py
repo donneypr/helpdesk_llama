@@ -9,6 +9,29 @@ import os
 import time
 import re
 
+# ollama imports
+from langchain_ollama import OllamaLLM
+
+# Initialize LLaMA3 model
+model = OllamaLLM(model="llama3")
+
+# Function to send the cleaned thread to the LLaMA3 model and get a response
+def generate_reply_with_llama(cleaned_thread):
+    prompt = (
+        f"Donato is an IT Assistant, respond to the following ticket request:\n\n"
+        f"Ticket Details:\n{cleaned_thread}\n\n"
+        "Please provide a helpful, professional response that is concise."
+    )
+    
+    # Send the prompt to the model
+    result = model.invoke(input=prompt)
+    
+    # Ensure result is a dictionary; return text or fallback
+    if isinstance(result, dict):
+        return result.get("text", "No response generated.")
+    else:
+        return result  # In case the result is a plain string
+
 # Load environment variables (for email and password)
 load_dotenv()
 
@@ -23,9 +46,11 @@ driver.get("https://ask2lit.lassonde.yorku.ca/app/itdesk/ui/requests")
 # Shorter wait times for testing
 time.sleep(10)
 
+# Retrieving email and password from .env file
 email = os.getenv("LOGIN_EMAIL")
 password = os.getenv("LOGIN_PASSWORD")
 
+# Logging in
 email_input = driver.find_element(By.ID, "login_id")
 email_input.send_keys(email)
 
@@ -51,6 +76,7 @@ except Exception as e:
     driver.quit()
     exit()
 
+# Scraping ticket rows
 ticket_rows = driver.find_elements(By.XPATH, "//tr[contains(@class, 'sdpTable requestlistview_row')]")
 
 if len(ticket_rows) > 0:
@@ -73,7 +99,7 @@ if len(ticket_rows) > 0:
 else:
     print("No rows found.")
 
-# Enhanced Function to clean up and format the scraped email thread
+# Function to clean up and format the scraped email thread
 def clean_text_for_ai(text):
     # Redundant patterns to remove (such as disclaimers, land acknowledgments, and signatures)
     redundant_texts = [
@@ -213,6 +239,13 @@ try:
         # Clean the scraped email thread text for AI
         cleaned_thread = clean_text_for_ai(email_thread)
         print(f"\nCleaned Thread for AI:\n{cleaned_thread}")
+
+        # Generate AI response with the LLaMA model
+        ai_reply = generate_reply_with_llama(cleaned_thread)
+        
+        # Format the AI response as an email with "Regards"
+        formatted_reply = f"{ai_reply}\n\nRegards,\n"
+        print(f"\nAI Response:\n{formatted_reply}")
 
     else:
         print("No notiDesc or note elements found.")
