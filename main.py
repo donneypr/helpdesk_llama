@@ -73,41 +73,51 @@ if len(ticket_rows) > 0:
 else:
     print("No rows found.")
 
-# Define redundant texts and patterns to remove (without specific names)
-redundant_texts = [
-    "We recognize that many Indigenous Nations have longstanding relationships with the territories",
-    "This electronic mail (e-mail), including any attachments, is intended only for the recipient",
-    "York University acknowledges its presence on the traditional territory of many Indigenous Nations",
-    "If you have received this e-mail in error, or are not named as a recipient, please immediately notify the sender",
-    "The area known as Tkaronto has been care taken by the Anishinabek Nation",
-    "This territory is subject of the Dish with One Spoon Wampum Belt Covenant",
-    "Any unauthorized use, dissemination or copying is strictly prohibited",
-    "(s) to whom it is addressed and may contain information that is privileged",
-    "Best regards,", "Thank you,", "Kind regards,", "Warm regards,",
-    "Lassonde School of Engineering", "Lassonde Information Technology", 
-    "Helpdesk Coordinator", "Cross-Campus Capstone Classroom",
-    "Please don’t feel obligated to reply outside your normal schedule."
-]
+# Enhanced Function to clean up and format the scraped email thread
+def clean_text_for_ai(text):
+    # Redundant patterns to remove (such as disclaimers, land acknowledgments, and signatures)
+    redundant_texts = [
+        "We recognize that many Indigenous Nations have longstanding relationships with the territories",
+        "York University acknowledges its presence on the traditional territory of many Indigenous Nations",
+        "This electronic mail (e-mail), including any attachments, is intended only for the recipient(s)",
+        "Any unauthorized use, dissemination or copying is strictly prohibited",
+        "If you have received this e-mail in error, or are not named as a recipient",
+        "Kind regards,", "Best regards,", "Warm regards,", "Sincerely,",
+        "Lassonde School of Engineering", "Helpdesk Coordinator", "Cross-Campus Capstone Classroom",
+        "VACATION NOTICE", "Z yorku.zoom.us", "T 416-736-5588", 
+        "Sandyjk@yorku.ca", "lassonde.yorku.ca", "YORK UNIVERSITY", 
+        "4700 Keele Street Toronto ON, Canada M3J 1P3", "The area known as Tkaronto has been care taken by the",
+        "Mississaugas of the Credit First Nation", "Dish with One Spoon Wampum Belt Covenant", "privileged, confidential and/or exempt from disclosure"
+    ]
 
-# Optionally, define regular expressions to match broader patterns
-redundant_patterns = [
-    r"York University acknowledges.*?Wampum Belt Covenant.*",  # Matches land acknowledgment
-    r"This e-mail, including any attachments.*?",  # Matches disclaimers about the email being privileged
-]
-
-# Function to clean the text
-def clean_text(text):
     # Remove redundant specific texts
     for redundant_text in redundant_texts:
         text = text.replace(redundant_text, "")
-    
-    # Use regular expressions to match and remove broader patterns
-    for pattern in redundant_patterns:
-        text = re.sub(pattern, "", text, flags=re.DOTALL)
 
-    # Remove excess spaces and newlines
-    text = " ".join(text.split())
-    return text
+    # Remove multiple newlines and extra whitespace
+    text = re.sub(r"\n+", "\n", text)  # Condense multiple newlines into one
+    text = re.sub(r"\s{2,}", " ", text)  # Condense multiple spaces into one
+
+    # Track unique lines using a set (case-insensitive)
+    seen_lines = set()
+    cleaned_lines = []
+
+    # Process line by line, removing duplicates
+    for line in text.splitlines():
+        line_lower = line.strip().lower()
+        if line_lower and line_lower not in seen_lines:
+            seen_lines.add(line_lower)
+            cleaned_lines.append(line.strip())
+
+    # Join the cleaned lines back into a full string
+    cleaned_text = "\n".join(cleaned_lines)
+
+    # Remove redundant headers like "Hello Danielle" and repeated "Thank you"
+    cleaned_text = re.sub(r"(Hello Danielle,)+", "Hello Danielle,", cleaned_text)
+    cleaned_text = re.sub(r"(Thank you,)+", "Thank you,", cleaned_text)
+    
+    # Final cleanup - trim excess whitespace and redundant phrases
+    return cleaned_text.strip()
 
 # Ensure all conversation threads and notes are opened before scraping
 def open_closed_elements():
@@ -163,9 +173,17 @@ try:
     if elements_to_scrape:
         print(f"Found {len(elements_to_scrape)} elements (notiDesc or notes).")
 
+        email_thread = ""
+        unique_texts = set()  # Set to store unique elements
+
         for idx, element in enumerate(elements_to_scrape):
             print(f"Processing element {idx + 1}...")
-            
+
+            is_note = "note_" in element.get_attribute("id")
+
+            if is_note:
+                print("\n--- Note ---\n")  # Print if it's a note
+
             # Check if the element is a shadow DOM host (notiDesc)
             try:
                 shadow_root = driver.execute_script("return arguments[0].shadowRoot", element)
@@ -179,16 +197,23 @@ try:
                     if shadow_elements:
                         print(f"Found {len(shadow_elements)} shadow elements.")
                         for shadow_element in shadow_elements:
-                            text = clean_text(shadow_element.text.strip())
-                            if text:
-                                print(f"Shadow Element Text: {text}")
+                            text = shadow_element.text.strip()
+                            if text and text not in unique_texts:  # Check for uniqueness
+                                unique_texts.add(text)
+                                email_thread += f"{text}\n"
                 else:
                     # If it's a regular note element (non-shadow)
-                    note_text = clean_text(element.text.strip())
-                    if note_text:
-                        print(f"Note: {note_text}")
+                    note_text = element.text.strip()
+                    if note_text and note_text not in unique_texts:
+                        unique_texts.add(note_text)
+                        email_thread += f"{note_text}\n"
             except Exception as e:
                 print(f"Error processing element {idx + 1}: {e}")
+        
+        # Clean the scraped email thread text for AI
+        cleaned_thread = clean_text_for_ai(email_thread)
+        print(f"\nCleaned Thread for AI:\n{cleaned_thread}")
+
     else:
         print("No notiDesc or note elements found.")
     
