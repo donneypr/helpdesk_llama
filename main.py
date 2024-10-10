@@ -9,20 +9,38 @@ import os
 import time
 import re
 from langchain_ollama import OllamaLLM
+from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_ticket
+
 
 model = OllamaLLM(model="llama3")
 
-def generate_reply_with_llama(cleaned_thread):
+def generate_reply_with_llama(cleaned_thread, similar_resolution):
     prompt = (
-        f"Donato is an IT Assistant, respond to the following ticket request:\n\n"
-        f"Ticket Details:\n{cleaned_thread}\n\n"
-        "Please provide a helpful, professional response that is concise."
-    )
+    f"Donato is an IT Assistant. Below is an email thread and a similar past resolution.\n\n"
+    f"Task: Analyze the email thread and determine who should be addressed in the response based on the context of the last message, while considering the entire conversation. Make sure the response is directed to the right person who is requesting action, and not to those CC'd or merely mentioned. Sign off with Donato's name.\n\n"
+    f"Email Thread:\n{cleaned_thread}\n\n"
+    f"Similar Past Resolution: {similar_resolution}\n\n"
+    "Please generate a concise, professional response, addressing the correct recipient and reflecting the context of the last message."
+)
+
+
     result = model.invoke(input=prompt)
     if isinstance(result, dict):
         return result.get("text", "No response generated.")
     else:
         return result
+
+# Function to scrape the subject (heading) of the ticket
+def scrape_subject():
+    try:
+        subject = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//*[@id='details_inner_title']/div[3]/h1"))
+        ).text
+        print(f"Scraped Subject: {subject}")
+        return subject
+    except Exception as e:
+        print(f"Error scraping subject: {e}")
+        return None
 
 load_dotenv()
 
@@ -86,18 +104,17 @@ else:
 
 def clean_text_for_ai(text):
     redundant_texts = [
-        "We recognize that many Indigenous Nations have longstanding relationships with the territories",
-        "York University acknowledges its presence on the traditional territory of many Indigenous Nations",
-        "This electronic mail (e-mail), including any attachments, is intended only for the recipient(s)",
-        "Any unauthorized use, dissemination or copying is strictly prohibited",
-        "If you have received this e-mail in error, or are not named as a recipient",
-        "Kind regards,", "Best regards,", "Warm regards,", "Sincerely,",
-        "Lassonde School of Engineering", "Helpdesk Coordinator", "Cross-Campus Capstone Classroom",
-        "VACATION NOTICE", "Z yorku.zoom.us", "T 416-736-5588", 
-        "Sandyjk@yorku.ca", "lassonde.yorku.ca", "YORK UNIVERSITY", 
-        "4700 Keele Street Toronto ON, Canada M3J 1P3", "The area known as Tkaronto has been care taken by the",
-        "Mississaugas of the Credit First Nation", "Dish with One Spoon Wampum Belt Covenant", "privileged, confidential and/or exempt from disclosure"
-    ]
+    "We recognize that many Indigenous Nations have longstanding relationships with the territories",
+    "Acknowledges its presence on the traditional territory of many Indigenous Nations",
+    "This electronic mail (e-mail), including any attachments, is intended only for the recipient(s)",
+    "Any unauthorized use, dissemination or copying is strictly prohibited",
+    "If you have received this e-mail in error, or are not named as a recipient",
+    "Kind regards,", "Best regards,", "Warm regards,", "Sincerely,",
+    "School of Engineering", "Helpdesk Coordinator", "Cross-Campus Capstone Classroom",
+    "VACATION NOTICE", "zoom.us", "email@domain.com", "website.domain", "UNIVERSITY", 
+    "4700 Keele Street Toronto ON, Canada M3J 1P3", "The area known as Tkaronto has been care taken by the",
+    "Mississaugas of the Credit First Nation", "Dish with One Spoon Wampum Belt Covenant", "privileged, confidential and/or exempt from disclosure"
+]
     for redundant_text in redundant_texts:
         text = text.replace(redundant_text, "")
     text = re.sub(r"\n+", "\n", text)
@@ -110,7 +127,7 @@ def clean_text_for_ai(text):
             seen_lines.add(line_lower)
             cleaned_lines.append(line.strip())
     cleaned_text = "\n".join(cleaned_lines)
-    cleaned_text = re.sub(r"(Hello Danielle,)+", "Hello Danielle,", cleaned_text)
+    cleaned_text = re.sub(r"(Hello,)+", "Danielle,", cleaned_text)
     cleaned_text = re.sub(r"(Thank you,)+", "Thank you,", cleaned_text)
     return cleaned_text.strip()
 
@@ -145,6 +162,10 @@ try:
     ticket_link.click()
     print(f"Successfully clicked on ticket {ticket_to_ans}.")
     time.sleep(10)
+    
+    # Scrape the subject after clicking the ticket
+    subject = scrape_subject()
+    
     open_closed_elements()
     elements_to_scrape = driver.find_elements(By.XPATH, "//div[starts-with(@id, 'notiDesc_') or starts-with(@id, 'note_')]")
 
@@ -176,11 +197,22 @@ try:
                         email_thread += f"{note_text}\n"
             except Exception as e:
                 print(f"Error processing element {idx + 1}: {e}")
+        
         cleaned_thread = clean_text_for_ai(email_thread)
         print(f"\nCleaned Thread for AI:\n{cleaned_thread}")
-        ai_reply = generate_reply_with_llama(cleaned_thread)
+        
+        # Load resolved tickets and perform TF-IDF similarity check
+        df = load_ticket_data('resolved_tickets.csv')
+        tfidf_matrix, vectorizer = vectorize_subjects(df)
+        _, similar_resolution = find_similar_ticket(subject, tfidf_matrix, df, vectorizer)
+        
+        # Pass the similar resolution to the Ollama model
+        ai_reply = generate_reply_with_llama(cleaned_thread, similar_resolution)
         formatted_reply = f"{ai_reply}\n,\n"
+        
+        # Print AI response and subject
         print(f"\nAI Response:\n{formatted_reply}")
+        print(f"\nTicket Subject: {subject}")
     else:
         print("No notiDesc or note elements found.")
     
