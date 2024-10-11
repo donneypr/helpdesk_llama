@@ -2,4 +2,4 @@ __pycache__/
 .env
 helpdesk_ollama
 chromedriver
-resolved_tickets
+resolved_tickets.csv
