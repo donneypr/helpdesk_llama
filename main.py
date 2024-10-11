@@ -4,6 +4,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from transformers import BartForConditionalGeneration, BartTokenizer
 from dotenv import load_dotenv
 import os
 import time
@@ -14,15 +15,26 @@ from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_
 
 model = OllamaLLM(model="llama3")
 
-def generate_reply_with_llama(cleaned_thread, similar_resolution):
-    prompt = (
-    f"Donato is an IT Assistant. Below is an email thread and a similar past resolution.\n\n"
-    f"Task: Analyze the email thread and determine who should be addressed in the response based on the context of the last message, while considering the entire conversation. Make sure the response is directed to the right person who is requesting action, and not to those CC'd or merely mentioned. Sign off with Donato's name.\n\n"
-    f"Email Thread:\n{cleaned_thread}\n\n"
-    f"Similar Past Resolution: {similar_resolution}\n\n"
-    "Please generate a concise, professional response, addressing the correct recipient and reflecting the context of the last message."
-)
+def load_bart_model():
+    model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
+    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+    return model, tokenizer
 
+def summarize_thread(thread_text, model, tokenizer, max_length=130):
+    inputs = tokenizer([thread_text], max_length=1024, return_tensors="pt", truncation=True)
+    summary_ids = model.generate(inputs["input_ids"], max_length=max_length, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
+    summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+    return summary
+
+# Generate a reply with Ollama
+def generate_reply_with_llama(summarized_thread, similar_resolution):
+    prompt = (
+    f"Donato is an IT Assistant. Below is a summarized email thread and a similar past resolution.\n\n"
+    f"Task: Analyze the summarized thread and determine who should be addressed in the response based on the context of the last message, while considering the entire conversation. Make sure the response is directed to the right person who is requesting action, and not to those CC'd or merely mentioned. Sign off with Donato's name.\n\n"
+    f"Summarized Email Thread:\n{summarized_thread}\n\n"
+    f"Similar Past Resolution: {similar_resolution}, if it applies, use it\n\n"
+    "Please generate a concise, professional response, addressing the correct recipient and reflecting the context of the last message."
+    )
 
     result = model.invoke(input=prompt)
     if isinstance(result, dict):
@@ -30,7 +42,6 @@ def generate_reply_with_llama(cleaned_thread, similar_resolution):
     else:
         return result
 
-# Function to scrape the subject (heading) of the ticket
 def scrape_subject():
     try:
         subject = WebDriverWait(driver, 10).until(
@@ -201,13 +212,15 @@ try:
         cleaned_thread = clean_text_for_ai(email_thread)
         print(f"\nCleaned Thread for AI:\n{cleaned_thread}")
         
-        # Load resolved tickets and perform TF-IDF similarity check
+        bart_model, bart_tokenizer = load_bart_model()
+        summarized_thread = summarize_thread(cleaned_thread, bart_model, bart_tokenizer)
+        print(f"\nSummarized Email Thread:\n{summarized_thread}")
+        
         df = load_ticket_data('resolved_tickets.csv')
         tfidf_matrix, vectorizer = vectorize_subjects(df)
         _, similar_resolution = find_similar_ticket(subject, tfidf_matrix, df, vectorizer)
         
-        # Pass the similar resolution to the Ollama model
-        ai_reply = generate_reply_with_llama(cleaned_thread, similar_resolution)
+        ai_reply = generate_reply_with_llama(summarized_thread, similar_resolution)
         formatted_reply = f"{ai_reply}\n,\n"
         
         # Print AI response and subject
