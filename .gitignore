@@ -1,0 +1,5 @@
+__pycache__/
+.env
+helpdesk_ollama
+chromedriver
+resolved_tickets
