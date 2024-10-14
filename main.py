@@ -232,5 +232,15 @@ try:
 except Exception as e:
     print(f"Error: Could not navigate to ticket {ticket_to_ans} or scrape the data. {e}")
 
+##click the reply all button
+reply_all_button = WebDriverWait(driver, 10).until(
+    EC.presence_of_element_located((By.XPATH, "//button[contains(@class, 'new-inc-btn') and .//span[text()='Reply All']]"))
+)
+
+driver.execute_script("arguments[0].scrollIntoView(true);", reply_all_button)
+
+time.sleep(1)
+
+driver.execute_script("arguments[0].click();", reply_all_button)
 time.sleep(100)
 driver.quit()
