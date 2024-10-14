@@ -12,7 +12,6 @@ import re
 from langchain_ollama import OllamaLLM
 from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_ticket
 
-
 model = OllamaLLM(model="llama3")
 
 def load_bart_model():
@@ -25,6 +24,18 @@ def summarize_thread(thread_text, model, tokenizer, max_length=130):
     summary_ids = model.generate(inputs["input_ids"], max_length=max_length, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
     summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
     return summary
+
+def type_like_human(driver, element, text, delay=0.1):
+    """
+    Simulate human typing by adding one character at a time with a delay.
+    :param driver: Selenium WebDriver instance
+    :param element: WebElement for the input box where typing should happen
+    :param text: The AI-generated text to type
+    :param delay: Delay between each keystroke (in seconds)
+    """
+    for char in text:
+        element.send_keys(char)
+        time.sleep(delay)
 
 # Generate a reply with Ollama
 def generate_reply_with_llama(summarized_thread, similar_resolution):
@@ -53,6 +64,39 @@ def scrape_subject():
         print(f"Error scraping subject: {e}")
         return None
 
+def type_reply_in_iframe(driver, ai_reply):
+    try:
+        # Ensure the iframe is fully loaded
+        iframe = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "iframe.ze_area"))
+        )
+        
+        print("Switching to the iframe with class 'ze_area'.")
+        driver.switch_to.frame(iframe)
+        
+        # Wait for the contenteditable div inside the iframe to be interactable
+        reply_box = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "body[contenteditable='true']"))
+        )
+        
+        print("Located the contenteditable div inside the iframe.")
+
+        # Use type_like_human to simulate human typing or JavaScript to set the text
+        # Uncomment the next line if you prefer to use JavaScript
+        # driver.execute_script(f"arguments[0].innerText = `{ai_reply}`;", reply_box)
+
+        # Simulate human typing
+        type_like_human(driver, reply_box, ai_reply)
+        print("Successfully input the reply using simulated typing.")
+
+        # Switch back to the main content
+        driver.switch_to.default_content()
+
+    except Exception as e:
+        print(f"Could not interact with the contenteditable div inside the iframe. Error: {e}")
+        driver.switch_to.default_content()  # Always reset to the main content after an attempt
+
+# Load environment variables
 load_dotenv()
 
 current_directory = os.getcwd()
@@ -61,8 +105,7 @@ service = Service(executable_path=chromedriver_path)
 driver = webdriver.Chrome(service=service)
 
 driver.get("https://ask2lit.lassonde.yorku.ca/app/itdesk/ui/requests")
-
-time.sleep(10)
+time.sleep(3)
 
 email = os.getenv("LOGIN_EMAIL")
 password = os.getenv("LOGIN_PASSWORD")
@@ -73,13 +116,13 @@ email_input.send_keys(email)
 button = driver.find_element(By.ID, "nextbtn")
 button.click()
 
-time.sleep(10)
+time.sleep(3)
 password_field = driver.find_element(By.ID, "password")
 password_field.send_keys(password)
 button = driver.find_element(By.ID, "nextbtn")
 button.click()
 
-time.sleep(10)
+time.sleep(3)
 
 try:
     WebDriverWait(driver, 20).until(
@@ -172,7 +215,7 @@ try:
     ticket_link = driver.find_element(By.XPATH, f"//span[@class='listview-display-id' and text()='{ticket_to_ans}']")
     ticket_link.click()
     print(f"Successfully clicked on ticket {ticket_to_ans}.")
-    time.sleep(10)
+    time.sleep(5)
     
     # Scrape the subject after clicking the ticket
     subject = scrape_subject()
@@ -232,15 +275,17 @@ try:
 except Exception as e:
     print(f"Error: Could not navigate to ticket {ticket_to_ans} or scrape the data. {e}")
 
-##click the reply all button
+# Click the reply all button
 reply_all_button = WebDriverWait(driver, 10).until(
     EC.presence_of_element_located((By.XPATH, "//button[contains(@class, 'new-inc-btn') and .//span[text()='Reply All']]"))
 )
 
 driver.execute_script("arguments[0].scrollIntoView(true);", reply_all_button)
-
 time.sleep(1)
-
 driver.execute_script("arguments[0].click();", reply_all_button)
+
+# After clicking the reply all button, wait for the iframe and type the AI reply
+type_reply_in_iframe(driver, ai_reply)
+
 time.sleep(100)
 driver.quit()
