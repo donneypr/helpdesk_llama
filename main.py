@@ -41,14 +41,11 @@ def type_like_human(driver, element, text, delay=0.01):
 # Generate a reply with Ollama
 def generate_reply_with_llama(summarized_thread, similar_resolution):
     prompt = (
-    f"Donato is an IT Assistant. Below is a summarized email thread and a similar past resolution.\n\n"
-    f"Task: Please generate **only** the body of the email response based on the summarized email thread. "
-    f"Do **not** include any greetings (e.g., 'Dear' or 'Hi,') or sign-offs (e.g., 'Best regards'). "
-    f"Do **not** include any analysis, commentary, or explanation about the email thread or the past resolution. "
-    f"Your output must consist solely of the core body response text addressing the issue raised in the last message. "
-    f"No additional context, reasoning, or introductions should be included in the output.\n\n"
+    f"You are Donato, an IT Assistant. Based on the summarized email thread below, provide the body of the email response. "
+    f"Do not include greetings, sign-offs, analysis, or explanations. "
+    f"Respond directly with the solution addressing the issue.\n\n"
     f"Summarized Email Thread:\n{summarized_thread}\n\n"
-    f"Similar Past Resolution: {similar_resolution}, if applicable.\n"
+    f"Similar Past Resolution (if applicable): {similar_resolution}\n"
 )
 
 
