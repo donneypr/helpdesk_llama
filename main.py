@@ -25,7 +25,7 @@ def summarize_thread(thread_text, model, tokenizer, max_length=130):
     summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
     return summary
 
-def type_like_human(driver, element, text, delay=0.1):
+def type_like_human(driver, element, text, delay=0.01):
     """
     Simulate human typing by adding one character at a time with a delay.
     :param driver: Selenium WebDriver instance
@@ -41,13 +41,15 @@ def type_like_human(driver, element, text, delay=0.1):
 def generate_reply_with_llama(summarized_thread, similar_resolution):
     prompt = (
     f"Donato is an IT Assistant. Below is a summarized email thread and a similar past resolution.\n\n"
-    f"Task: Analyze the summarized thread and determine who should be addressed in the response based on the context of the last message, while considering the entire conversation. Make sure the response is directed to the right person who is requesting action, and not to those CC'd or merely mentioned. Sign off with Donato's name.\n\n"
+    f"Task: Please generate only the body of the email response based on the summarized email thread. "
+    f"Do not include any greetings (e.g., 'Dear' or 'Hi,') or sign-offs (e.g., 'Best regards'). "
+    f"Strictly output the body of the response that addresses the issue raised in the last message. "
+    f"Do not include any analysis, commentary, or explanation about the email thread or the past resolution. "
+    f"Only generate the necessary response text.\n\n"
     f"Summarized Email Thread:\n{summarized_thread}\n\n"
-    f"Similar Past Resolution: {similar_resolution}, if it applies, use it\n\n"
-    "Please generate a concise, professional response, addressing the correct recipient and reflecting the context of the last message."
-    "I only want the body thread and nothing else, no email closure or greeting"
-    "Don't show me the propmt showing me heres the AI Response"
+    f"Similar Past Resolution: {similar_resolution}, if applicable.\n"
     )
+
 
     result = model.invoke(input=prompt)
     if isinstance(result, dict):
@@ -76,26 +78,41 @@ def type_reply_in_iframe(driver, ai_reply):
         print("Switching to the iframe with class 'ze_area'.")
         driver.switch_to.frame(iframe)
         
-        # Wait for the contenteditable div inside the iframe to be interactable
+        # Wait for the specific div element inside the iframe to be interactable
         reply_box = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "body[contenteditable='true']"))
+            EC.presence_of_element_located((By.XPATH, "/html/body/div[3]"))
         )
         
-        print("Located the contenteditable div inside the iframe.")
+        print("Located the div element '/html/body/div[3]' inside the iframe.")
 
-        # Use type_like_human to simulate human typing or JavaScript to set the text
-        # Uncomment the next line if you prefer to use JavaScript
-        # driver.execute_script(f"arguments[0].innerText = `{ai_reply}`;", reply_box)
+        # Move the cursor to the end of the first line in the reply_box
+        driver.execute_script("""
+            var divElement = arguments[0];
+            var range = document.createRange();
+            var sel = window.getSelection();
+            
+            // Move the cursor to the end of the first line (assuming it's a text node)
+            var firstLine = divElement.firstChild;
+            if (firstLine) {
+                range.setStart(firstLine, firstLine.length);
+                range.setEnd(firstLine, firstLine.length);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+        """, reply_box)
 
-        # Simulate human typing
+        # Add two line breaks after moving to the end of the first line
+        reply_box.send_keys("\n\n")
+
+        # Simulate human typing for the reply
         type_like_human(driver, reply_box, ai_reply)
-        print("Successfully input the reply using simulated typing.")
+        print("Successfully input the reply after two line breaks.")
 
         # Switch back to the main content
         driver.switch_to.default_content()
 
     except Exception as e:
-        print(f"Could not interact with the contenteditable div inside the iframe. Error: {e}")
+        print(f"Could not interact with the div inside the iframe. Error: {e}")
         driver.switch_to.default_content()  # Always reset to the main content after an attempt
 
 # Load environment variables
