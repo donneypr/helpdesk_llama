@@ -27,36 +27,25 @@ def summarize_thread(thread_text, model, tokenizer, max_length=130):
     return summary
 
 def type_like_human(driver, element, text, delay=0.01):
-    """
-    Simulate human typing by adding one character at a time with a delay.
-    :param driver: Selenium WebDriver instance
-    :param element: WebElement for the input box where typing should happen
-    :param text: The AI-generated text to type
-    :param delay: Delay between each keystroke (in seconds)
-    """
     for char in text:
         element.send_keys(char)
         time.sleep(delay)
 
-# Generate a reply with Ollama
 def generate_reply_with_llama(summarized_thread, similar_resolution):
     prompt = (
-    f"You are Donato, an IT Assistant. Based on the summarized email thread below, provide the body of the email response. "
-    f"Do not include greetings, sign-offs, analysis, or explanations. "
-    f"Respond directly with the solution addressing the issue.\n\n"
-    f"Summarized Email Thread:\n{summarized_thread}\n\n"
-    f"Similar Past Resolution (if applicable): {similar_resolution}\n"
-)
-
-
+        f"You are Donato, an IT Assistant. Based on the summarized email thread below, provide the body of the email response. "
+        f"Do not include greetings, sign-offs, analysis, or explanations. "
+        f"Respond directly with the solution addressing the issue.\n\n"
+        f"Summarized Email Thread:\n{summarized_thread}\n\n"
+        f"Similar Past Resolution (if applicable): {similar_resolution}\n"
+    )
     result = model.invoke(input=prompt)
     if isinstance(result, dict):
         return result.get("text", "No response generated.")
     else:
         return result
 
-
-def scrape_subject():
+def scrape_subject(driver):
     try:
         subject = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, "//*[@id='details_inner_title']/div[3]/h1"))
@@ -69,39 +58,78 @@ def scrape_subject():
 
 def type_reply_in_iframe(driver, ai_reply):
     try:
-        # Ensure the iframe is fully loaded
         iframe = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "iframe.ze_area"))
         )
-        
         print("Switching to the iframe with class 'ze_area'.")
         driver.switch_to.frame(iframe)
-        
-        # Wait for the specific div element inside the iframe to be interactable
+
         reply_box = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, "/html/body/div[3]"))
         )
-        
         print("Located the div element '/html/body/div[3]' inside the iframe.")
 
-        # Move the cursor to the end of the content in the reply_box
         reply_box.send_keys(Keys.END)
-        
-        # Add two line breaks after moving to the end
         reply_box.send_keys(Keys.ENTER)
         reply_box.send_keys(Keys.ENTER)
-
-        # Now type the AI-generated reply below the existing content
         type_like_human(driver, reply_box, ai_reply)
         print("Successfully input the reply after two line breaks.")
 
-        # Switch back to the main content
         driver.switch_to.default_content()
 
     except Exception as e:
         print(f"Could not interact with the div inside the iframe. Error: {e}")
-        driver.switch_to.default_content()  # Always reset to the main content after an attempt
+        driver.switch_to.default_content()
 
+def clean_text_for_ai(text):
+    redundant_texts = [
+        "We recognize that many Indigenous Nations have longstanding relationships with the territories",
+        "Acknowledges its presence on the traditional territory of many Indigenous Nations",
+        "This electronic mail (e-mail), including any attachments, is intended only for the recipient(s)",
+        "Any unauthorized use, dissemination or copying is strictly prohibited",
+        "If you have received this e-mail in error, or are not named as a recipient",
+        "Kind regards,", "Best regards,", "Warm regards,", "Sincerely,",
+        "School of Engineering", "Helpdesk Coordinator", "Cross-Campus Capstone Classroom",
+        "VACATION NOTICE", "zoom.us", "email@domain.com", "website.domain", "UNIVERSITY", 
+        "4700 Keele Street Toronto ON, Canada M3J 1P3", "The area known as Tkaronto has been care taken by the",
+        "Mississaugas of the Credit First Nation", "Dish with One Spoon Wampum Belt Covenant", "privileged, confidential and/or exempt from disclosure"
+    ]
+    for redundant_text in redundant_texts:
+        text = text.replace(redundant_text, "")
+    text = re.sub(r"\n+", "\n", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    seen_lines = set()
+    cleaned_lines = []
+    for line in text.splitlines():
+        line_lower = line.strip().lower()
+        if line_lower and line_lower not in seen_lines:
+            seen_lines.add(line_lower)
+            cleaned_lines.append(line.strip())
+    cleaned_text = "\n".join(cleaned_lines)
+    cleaned_text = re.sub(r"(Hello,)+", "Danielle,", cleaned_text)
+    cleaned_text = re.sub(r"(Thank you,)+", "Thank you,", cleaned_text)
+    return cleaned_text.strip()
+
+def open_closed_elements(driver):
+    conversation_heads = driver.find_elements(By.XPATH, "//div[contains(@class, 'conversation-head')]")
+    if len(conversation_heads) > 1:
+        for idx, conv_head in enumerate(conversation_heads[1:], start=2):
+            try:
+                print(f"Clicking conversation thread {idx}...")
+                conv_head.click()
+                time.sleep(2)
+            except Exception as e:
+                print(f"Error opening conversation thread {idx}: {e}")
+
+    notes = driver.find_elements(By.XPATH, "//div[starts-with(@id, 'notiDesc_') or starts-with(@id, 'note_')]")
+    for idx, note in enumerate(notes):
+        try:
+            if "display: none;" in note.get_attribute("style"):
+                conversation_head = note.find_element(By.XPATH, ".//preceding-sibling::div[contains(@class, 'conversation-head')]")
+                conversation_head.click()
+                time.sleep(2)
+        except Exception as e:
+            print(f"Error opening note {idx + 1}: {e}")
 
 # Load environment variables
 load_dotenv()
@@ -131,165 +159,118 @@ button.click()
 
 time.sleep(3)
 
-try:
+def scrape_tickets(driver):
     WebDriverWait(driver, 20).until(
         EC.visibility_of_element_located((By.XPATH, "//tr[contains(@class, 'sdpTable requestlistview_row')]"))
     )
     print("Table rows are now visible, proceeding to read the data.")
+    ticket_rows = driver.find_elements(By.XPATH, "//tr[contains(@class, 'sdpTable requestlistview_row')]")
+    return ticket_rows
+
+try:
+    ticket_rows = scrape_tickets(driver)
+
 except Exception as e:
     print(f"Error: The table rows did not load in time. {e}")
     driver.quit()
     exit()
 
-ticket_rows = driver.find_elements(By.XPATH, "//tr[contains(@class, 'sdpTable requestlistview_row')]")
-
-if len(ticket_rows) > 0:
-    print(f"Found {len(ticket_rows)} rows.")
-    
-    for row in ticket_rows:
-        try:
-            reply_icon = row.find_elements(By.XPATH, ".//div[contains(@class, 'listicon replyicon_REQ_REPLY')]")
-            resolved_or_closed = row.find_elements(By.XPATH, ".//td[contains(@class, 'evenRow')]//span[text()='Resolved' or text()='Closed']")
-
-            if reply_icon and not resolved_or_closed:
-                ticket_number = row.find_element(By.XPATH, ".//span[@class='listview-display-id']").text
-                subject = row.find_element(By.XPATH, ".//td[contains(@class, 'wo-subject')]").text
-                technician_or_status = row.find_element(By.XPATH, ".//td[@title]").text
-                
-                print(f"Ticket Number: {ticket_number}, Subject: {subject}, Technician/Status: {technician_or_status}")
-                
-        except Exception as e:
-            print(f"Error processing row: {e}")
-else:
-    print("No rows found.")
-
-def clean_text_for_ai(text):
-    redundant_texts = [
-    "We recognize that many Indigenous Nations have longstanding relationships with the territories",
-    "Acknowledges its presence on the traditional territory of many Indigenous Nations",
-    "This electronic mail (e-mail), including any attachments, is intended only for the recipient(s)",
-    "Any unauthorized use, dissemination or copying is strictly prohibited",
-    "If you have received this e-mail in error, or are not named as a recipient",
-    "Kind regards,", "Best regards,", "Warm regards,", "Sincerely,",
-    "School of Engineering", "Helpdesk Coordinator", "Cross-Campus Capstone Classroom",
-    "VACATION NOTICE", "zoom.us", "email@domain.com", "website.domain", "UNIVERSITY", 
-    "4700 Keele Street Toronto ON, Canada M3J 1P3", "The area known as Tkaronto has been care taken by the",
-    "Mississaugas of the Credit First Nation", "Dish with One Spoon Wampum Belt Covenant", "privileged, confidential and/or exempt from disclosure"
-]
-    for redundant_text in redundant_texts:
-        text = text.replace(redundant_text, "")
-    text = re.sub(r"\n+", "\n", text)
-    text = re.sub(r"\s{2,}", " ", text)
-    seen_lines = set()
-    cleaned_lines = []
-    for line in text.splitlines():
-        line_lower = line.strip().lower()
-        if line_lower and line_lower not in seen_lines:
-            seen_lines.add(line_lower)
-            cleaned_lines.append(line.strip())
-    cleaned_text = "\n".join(cleaned_lines)
-    cleaned_text = re.sub(r"(Hello,)+", "Danielle,", cleaned_text)
-    cleaned_text = re.sub(r"(Thank you,)+", "Thank you,", cleaned_text)
-    return cleaned_text.strip()
-
-def open_closed_elements():
-    conversation_heads = driver.find_elements(By.XPATH, "//div[contains(@class, 'conversation-head')]")
-    if len(conversation_heads) > 1:
-        for idx, conv_head in enumerate(conversation_heads[1:], start=2):
+# Start REPL-like behavior
+while True:
+    if len(ticket_rows) > 0:
+        for row in ticket_rows:
             try:
-                print(f"Clicking conversation thread {idx}...")
-                conv_head.click()
-                time.sleep(2)
+                reply_icon = row.find_elements(By.XPATH, ".//div[contains(@class, 'listicon replyicon_REQ_REPLY')]")
+                resolved_or_closed = row.find_elements(By.XPATH, ".//td[contains(@class, 'evenRow')]//span[text()='Resolved' or text()='Closed']")
+
+                if reply_icon and not resolved_or_closed:
+                    ticket_number = row.find_element(By.XPATH, ".//span[@class='listview-display-id']").text
+                    subject = row.find_element(By.XPATH, ".//td[contains(@class, 'wo-subject')]").text
+                    technician_or_status = row.find_element(By.XPATH, ".//td[@title]").text
+                    
+                    print(f"Ticket Number: {ticket_number}, Subject: {subject}, Technician/Status: {technician_or_status}")
+                    
             except Exception as e:
-                print(f"Error opening conversation thread {idx}: {e}")
-    notes = driver.find_elements(By.XPATH, "//div[starts-with(@id, 'notiDesc_') or starts-with(@id, 'note_')]")
-    for idx, note in enumerate(notes):
-        try:
-            if "display: none;" in note.get_attribute("style"):
-                conversation_head = note.find_element(By.XPATH, ".//preceding-sibling::div[contains(@class, 'conversation-head')]")
-                conversation_head.click()
-                time.sleep(2)
-        except Exception as e:
-            print(f"Error opening note {idx + 1}: {e}")
+                print(f"Error processing row: {e}")
+    else:
+        print("No rows found.")
 
-ticket_to_ans = input("\nEnter the ticket number you would like the AI to reply to: ").strip()
+    # Input for ticket number or exit
+    ticket_to_ans = input("\nEnter the ticket number you would like the AI to reply to or type 'exit' to quit: ").strip()
 
-while not ticket_to_ans:
-    print("Error: Ticket number cannot be empty. Please try again.")
-    ticket_to_ans = input("\nEnter the ticket number you would like the AI to reply to: ").strip()
+    if ticket_to_ans.lower() == "exit":
+        print("Exiting the ticket answering system.")
+        driver.quit()
+        break
 
-try:
-    ticket_link = driver.find_element(By.XPATH, f"//span[@class='listview-display-id' and text()='{ticket_to_ans}']")
-    ticket_link.click()
-    print(f"Successfully clicked on ticket {ticket_to_ans}.")
-    time.sleep(5)
-    
-    # Scrape the subject after clicking the ticket
-    subject = scrape_subject()
-    
-    open_closed_elements()
-    elements_to_scrape = driver.find_elements(By.XPATH, "//div[starts-with(@id, 'notiDesc_') or starts-with(@id, 'note_')]")
+    try:
+        ticket_link = driver.find_element(By.XPATH, f"//span[@class='listview-display-id' and text()='{ticket_to_ans}']")
+        ticket_link.click()
+        print(f"Successfully clicked on ticket {ticket_to_ans}.")
+        time.sleep(5)
 
-    if elements_to_scrape:
-        print(f"Found {len(elements_to_scrape)} elements (notiDesc or notes).")
-        email_thread = ""
-        unique_texts = set()
-        for idx, element in enumerate(elements_to_scrape):
-            print(f"Processing element {idx + 1}...")
-            is_note = "note_" in element.get_attribute("id")
-            if is_note:
-                print("\n--- Note ---\n")
-            try:
-                shadow_root = driver.execute_script("return arguments[0].shadowRoot", element)
-                if shadow_root:
-                    print(f"Successfully accessed shadow root for element {idx + 1}.")
-                    shadow_elements = shadow_root.find_elements(By.CSS_SELECTOR, "div, span, p")
-                    if shadow_elements:
-                        print(f"Found {len(shadow_elements)} shadow elements.")
+        subject = scrape_subject(driver)
+        open_closed_elements(driver)
+        elements_to_scrape = driver.find_elements(By.XPATH, "//div[starts-with(@id, 'notiDesc_') or starts-with(@id, 'note_')]")
+
+        if elements_to_scrape:
+            print(f"Found {len(elements_to_scrape)} elements (notiDesc or notes).")
+            email_thread = ""
+            unique_texts = set()
+            for idx, element in enumerate(elements_to_scrape):
+                print(f"Processing element {idx + 1}...")
+                is_note = "note_" in element.get_attribute("id")
+                if is_note:
+                    print("\n--- Note ---\n")
+                try:
+                    shadow_root = driver.execute_script("return arguments[0].shadowRoot", element)
+                    if shadow_root:
+                        shadow_elements = shadow_root.find_elements(By.CSS_SELECTOR, "div, span, p")
                         for shadow_element in shadow_elements:
                             text = shadow_element.text.strip()
                             if text and text not in unique_texts:
                                 unique_texts.add(text)
                                 email_thread += f"{text}\n"
-                else:
-                    note_text = element.text.strip()
-                    if note_text and note_text not in unique_texts:
-                        unique_texts.add(note_text)
-                        email_thread += f"{note_text}\n"
-            except Exception as e:
-                print(f"Error processing element {idx + 1}: {e}")
-        
-        cleaned_thread = clean_text_for_ai(email_thread)
-        print(f"\nCleaned Thread for AI:\n{cleaned_thread}")
-        
-        bart_model, bart_tokenizer = load_bart_model()
-        summarized_thread = summarize_thread(cleaned_thread, bart_model, bart_tokenizer)
-        print(f"\nSummarized Email Thread:\n{summarized_thread}")
-        
-        df = load_ticket_data('resolved_tickets.csv')
-        tfidf_matrix, vectorizer = vectorize_subjects(df)
-        _, similar_resolution = find_similar_ticket(subject, tfidf_matrix, df, vectorizer)
-        
-        ai_reply = generate_reply_with_llama(summarized_thread, similar_resolution)
-        formatted_reply = f"{ai_reply}\n,\n"
-        
-        print(f"\nAI Response:\n{formatted_reply}")
-        print(f"\nTicket Subject: {subject}")
-    else:
-        print("No notiDesc or note elements found.")
-    
-except Exception as e:
-    print(f"Error: Could not navigate to ticket {ticket_to_ans} or scrape the data. {e}")
+                    else:
+                        note_text = element.text.strip()
+                        if note_text and note_text not in unique_texts:
+                            unique_texts.add(note_text)
+                            email_thread += f"{note_text}\n"
+                except Exception as e:
+                    print(f"Error processing element {idx + 1}: {e}")
 
-reply_all_button = WebDriverWait(driver, 10).until(
-    EC.presence_of_element_located((By.XPATH, "//button[contains(@class, 'new-inc-btn') and .//span[text()='Reply All']]"))
-)
+            cleaned_thread = clean_text_for_ai(email_thread)
+            bart_model, bart_tokenizer = load_bart_model()
+            summarized_thread = summarize_thread(cleaned_thread, bart_model, bart_tokenizer)
 
-driver.execute_script("arguments[0].scrollIntoView(true);", reply_all_button)
-time.sleep(1)
-driver.execute_script("arguments[0].click();", reply_all_button)
+            df = load_ticket_data('resolved_tickets.csv')
+            tfidf_matrix, vectorizer = vectorize_subjects(df)
+            _, similar_resolution = find_similar_ticket(subject, tfidf_matrix, df, vectorizer)
 
-type_reply_in_iframe(driver, ai_reply)
+            ai_reply = generate_reply_with_llama(summarized_thread, similar_resolution)
+            print(f"\nAI Response:\n{ai_reply}")
 
-time.sleep(100)
-driver.quit()
+            reply_all_button = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//button[contains(@class, 'new-inc-btn') and .//span[text()='Reply All']]"))
+            )
+
+            driver.execute_script("arguments[0].scrollIntoView(true);", reply_all_button)
+            time.sleep(1)
+            driver.execute_script("arguments[0].click();", reply_all_button)
+
+            type_reply_in_iframe(driver, ai_reply)
+
+            # Ask if user wants to go back to requests page
+            exit_after_reply = input("Type 'exit' to return to the requests page or 'quit' to end the session: ").strip()
+
+            if exit_after_reply.lower() == 'quit':
+                print("Exiting the system.")
+                driver.quit()
+                break
+            elif exit_after_reply.lower() == 'exit':
+                # Navigate back to requests page
+                driver.get("https://ask2lit.lassonde.yorku.ca/app/itdesk/ui/requests")
+                ticket_rows = scrape_tickets(driver)  # Re-scrape the tickets
+
+    except Exception as e:
+        print(f"Error: Could not navigate to ticket {ticket_to_ans} or scrape the data. {e}")
