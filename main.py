@@ -11,6 +11,7 @@ import time
 import re
 from langchain_ollama import OllamaLLM
 from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_ticket
+from selenium.webdriver.common.keys import Keys
 
 model = OllamaLLM(model="llama3")
 
@@ -41,14 +42,14 @@ def type_like_human(driver, element, text, delay=0.01):
 def generate_reply_with_llama(summarized_thread, similar_resolution):
     prompt = (
     f"Donato is an IT Assistant. Below is a summarized email thread and a similar past resolution.\n\n"
-    f"Task: Please generate only the body of the email response based on the summarized email thread. "
-    f"Do not include any greetings (e.g., 'Dear' or 'Hi,') or sign-offs (e.g., 'Best regards'). "
-    f"Strictly output the body of the response that addresses the issue raised in the last message. "
-    f"Do not include any analysis, commentary, or explanation about the email thread or the past resolution. "
-    f"Only generate the necessary response text.\n\n"
+    f"Task: Please generate **only** the body of the email response based on the summarized email thread. "
+    f"Do **not** include any greetings (e.g., 'Dear' or 'Hi,') or sign-offs (e.g., 'Best regards'). "
+    f"Do **not** include any analysis, commentary, or explanation about the email thread or the past resolution. "
+    f"Your output must consist solely of the core body response text addressing the issue raised in the last message. "
+    f"No additional context, reasoning, or introductions should be included in the output.\n\n"
     f"Summarized Email Thread:\n{summarized_thread}\n\n"
     f"Similar Past Resolution: {similar_resolution}, if applicable.\n"
-    )
+)
 
 
     result = model.invoke(input=prompt)
@@ -85,26 +86,14 @@ def type_reply_in_iframe(driver, ai_reply):
         
         print("Located the div element '/html/body/div[3]' inside the iframe.")
 
-        # Move the cursor to the end of the first line in the reply_box
-        driver.execute_script("""
-            var divElement = arguments[0];
-            var range = document.createRange();
-            var sel = window.getSelection();
-            
-            // Move the cursor to the end of the first line (assuming it's a text node)
-            var firstLine = divElement.firstChild;
-            if (firstLine) {
-                range.setStart(firstLine, firstLine.length);
-                range.setEnd(firstLine, firstLine.length);
-                sel.removeAllRanges();
-                sel.addRange(range);
-            }
-        """, reply_box)
+        # Move the cursor to the end of the content in the reply_box
+        reply_box.send_keys(Keys.END)
+        
+        # Add two line breaks after moving to the end
+        reply_box.send_keys(Keys.ENTER)
+        reply_box.send_keys(Keys.ENTER)
 
-        # Add two line breaks after moving to the end of the first line
-        reply_box.send_keys("\n\n")
-
-        # Simulate human typing for the reply
+        # Now type the AI-generated reply below the existing content
         type_like_human(driver, reply_box, ai_reply)
         print("Successfully input the reply after two line breaks.")
 
@@ -114,6 +103,7 @@ def type_reply_in_iframe(driver, ai_reply):
     except Exception as e:
         print(f"Could not interact with the div inside the iframe. Error: {e}")
         driver.switch_to.default_content()  # Always reset to the main content after an attempt
+
 
 # Load environment variables
 load_dotenv()
