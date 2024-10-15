@@ -45,6 +45,8 @@ def generate_reply_with_llama(summarized_thread, similar_resolution):
     f"Summarized Email Thread:\n{summarized_thread}\n\n"
     f"Similar Past Resolution: {similar_resolution}, if it applies, use it\n\n"
     "Please generate a concise, professional response, addressing the correct recipient and reflecting the context of the last message."
+    "I only want the body thread and nothing else, no email closure or greeting"
+    "Don't show me the propmt showing me heres the AI Response"
     )
 
     result = model.invoke(input=prompt)
@@ -266,7 +268,6 @@ try:
         ai_reply = generate_reply_with_llama(summarized_thread, similar_resolution)
         formatted_reply = f"{ai_reply}\n,\n"
         
-        # Print AI response and subject
         print(f"\nAI Response:\n{formatted_reply}")
         print(f"\nTicket Subject: {subject}")
     else:
@@ -275,7 +276,6 @@ try:
 except Exception as e:
     print(f"Error: Could not navigate to ticket {ticket_to_ans} or scrape the data. {e}")
 
-# Click the reply all button
 reply_all_button = WebDriverWait(driver, 10).until(
     EC.presence_of_element_located((By.XPATH, "//button[contains(@class, 'new-inc-btn') and .//span[text()='Reply All']]"))
 )
@@ -284,7 +284,6 @@ driver.execute_script("arguments[0].scrollIntoView(true);", reply_all_button)
 time.sleep(1)
 driver.execute_script("arguments[0].click();", reply_all_button)
 
-# After clicking the reply all button, wait for the iframe and type the AI reply
 type_reply_in_iframe(driver, ai_reply)
 
 time.sleep(100)
