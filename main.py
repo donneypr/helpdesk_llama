@@ -58,6 +58,7 @@ def generate_reply_with_llama(summarized_thread, similar_resolution):
     else:
         return result
 
+
 def scrape_subject():
     try:
         subject = WebDriverWait(driver, 10).until(
