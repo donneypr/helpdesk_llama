@@ -13,7 +13,7 @@ from langchain_ollama import OllamaLLM
 from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_ticket
 from selenium.webdriver.common.keys import Keys
 
-model = OllamaLLM(model="llama3")
+model = OllamaLLM(model="llama3.2")
 
 def load_bart_model():
     model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
@@ -33,7 +33,7 @@ def type_like_human(driver, element, text, delay=0.01):
 
 def generate_reply_with_llama(summarized_thread, similar_resolution):
     prompt = (
-        f"You are Donato, an IT Assistant. Based on the summarized email thread below, provide the body of the email response. "
+        f"You are an IT Assistant. Based on the summarized email thread below, provide a solution to their of the email response. "
         f"Do not include greetings, sign-offs, analysis, or explanations. "
         f"Respond directly with the solution addressing the issue.\n\n"
         f"Summarized Email Thread:\n{summarized_thread}\n\n"
@@ -94,10 +94,17 @@ def clean_text_for_ai(text):
         "4700 Keele Street Toronto ON, Canada M3J 1P3", "The area known as Tkaronto has been care taken by the",
         "Mississaugas of the Credit First Nation", "Dish with One Spoon Wampum Belt Covenant", "privileged, confidential and/or exempt from disclosure"
     ]
+    
+    # Remove land acknowledgement block
+    land_acknowledgement_pattern = r"We recognize that many Indigenous Nations.*?Dish with One Spoon Wampum Belt Covenant"
+    text = re.sub(land_acknowledgement_pattern, "", text, flags=re.DOTALL)
+
     for redundant_text in redundant_texts:
         text = text.replace(redundant_text, "")
+    
     text = re.sub(r"\n+", "\n", text)
     text = re.sub(r"\s{2,}", " ", text)
+    
     seen_lines = set()
     cleaned_lines = []
     for line in text.splitlines():
@@ -105,9 +112,11 @@ def clean_text_for_ai(text):
         if line_lower and line_lower not in seen_lines:
             seen_lines.add(line_lower)
             cleaned_lines.append(line.strip())
+    
     cleaned_text = "\n".join(cleaned_lines)
     cleaned_text = re.sub(r"(Hello,)+", "Danielle,", cleaned_text)
     cleaned_text = re.sub(r"(Thank you,)+", "Thank you,", cleaned_text)
+    
     return cleaned_text.strip()
 
 def open_closed_elements(driver):
@@ -274,3 +283,6 @@ while True:
 
     except Exception as e:
         print(f"Error: Could not navigate to ticket {ticket_to_ans} or scrape the data. {e}")
+
+
+
