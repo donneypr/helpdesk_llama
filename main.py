@@ -80,24 +80,25 @@ def type_reply_in_iframe(driver, ai_reply):
 
     except Exception as e:
         print(f"Could not interact with the div inside the iframe. Error: {e}")
-        # Always switch back to the main content in case of an exception
         driver.switch_to.default_content()
 
 def clean_text_for_ai(text):
     redundant_texts = [
-        # Add your redundant texts for cleanup here
+        "We recognize that many Indigenous Nations have longstanding relationships with the territories",
+        "Acknowledges its presence on the traditional territory of many Indigenous Nations",
+        "This electronic mail (e-mail), including any attachments, is intended only for the recipient(s)",
+        "Any unauthorized use, dissemination or copying is strictly prohibited",
+        "If you have received this e-mail in error, or are not named as a recipient",
+        "Kind regards,", "Best regards,", "Warm regards,", "Sincerely,",
+        "School of Engineering", "Helpdesk Coordinator", "Cross-Campus Capstone Classroom",
+        "VACATION NOTICE", "zoom.us", "email@domain.com", "website.domain", "UNIVERSITY", 
+        "4700 Keele Street Toronto ON, Canada M3J 1P3", "The area known as Tkaronto has been care taken by the",
+        "Mississaugas of the Credit First Nation", "Dish with One Spoon Wampum Belt Covenant", "privileged, confidential and/or exempt from disclosure"
     ]
-    
-    # Remove any unnecessary texts here, like land acknowledgment blocks
-    land_acknowledgement_pattern = r"We recognize that many Indigenous Nations.*?Dish with One Spoon Wampum Belt Covenant"
-    text = re.sub(land_acknowledgement_pattern, "", text, flags=re.DOTALL)
-
     for redundant_text in redundant_texts:
         text = text.replace(redundant_text, "")
-    
     text = re.sub(r"\n+", "\n", text)
     text = re.sub(r"\s{2,}", " ", text)
-    
     seen_lines = set()
     cleaned_lines = []
     for line in text.splitlines():
@@ -105,8 +106,9 @@ def clean_text_for_ai(text):
         if line_lower and line_lower not in seen_lines:
             seen_lines.add(line_lower)
             cleaned_lines.append(line.strip())
-    
     cleaned_text = "\n".join(cleaned_lines)
+    cleaned_text = re.sub(r"(Hello,)+", "Danielle,", cleaned_text)
+    cleaned_text = re.sub(r"(Thank you,)+", "Thank you,", cleaned_text)
     return cleaned_text.strip()
 
 def open_closed_elements(driver):
