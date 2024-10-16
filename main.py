@@ -14,7 +14,7 @@ from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_
 from selenium.webdriver.common.keys import Keys
 
 # Set up LLaMA model
-model = OllamaLLM(model="llama3")
+model = OllamaLLM(model="llama3.2")
 
 def load_bart_model():
     model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
