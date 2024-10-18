@@ -14,9 +14,13 @@ from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_
 from selenium.webdriver.common.keys import Keys
 
 
-#ansi colours
+#ansi colours declarations
 GREEN = "\033[92m"
 RESET = "\033[0m"  
+YELLOW = "\033[33m"
+BRIGHTMAGENTA = "\033[95m"
+RED = "\033[91m"
+
 
 
 model = OllamaLLM(model="llama3.2")
@@ -235,7 +239,7 @@ while True:
     else:
         print("No rows found.")
 
-    ticket_to_ans = input("\nEnter the ticket number you would like the AI to reply to or type 'exit' to quit: ").strip()
+    ticket_to_ans = input(f"\n{YELLOW}Enter the ticket number you would like the AI to reply to or type 'exit' to quit: {RESET}").strip()
 
     if ticket_to_ans.lower() == "exit":
         print("Exiting the ticket answering system.")
@@ -295,14 +299,14 @@ while True:
             print(f"{GREEN}AI Response Similarity Score: {similarity_score:.2f}%{RESET}")
 
             # Ask user if they want to use the AI-generated response
-            user_choice = input("Do you want to use the AI-generated response? (yes/no): ").strip().lower()
+            user_choice = input(f"{BRIGHTMAGENTA}Do you want to use the AI-generated response? (yes/no): {RESET}").strip().lower()
 
             if user_choice == 'yes':
                 similarity_score = compare_ai_response_to_resolution(ai_reply, similar_resolution, df)
                 print(f"{GREEN}AI Response Similarity Score: {similarity_score:.2f}%{RESET}")
             elif user_choice == 'no':
                 # If no, allow the user to input a sentence or keywords, and AI completes the response
-                user_input = input("Please enter your input, and the AI will complete it: ").strip()
+                user_input = input(f"{YELLOW}Please enter your input, and the AI will complete it: {RESET}").strip()
                 ai_reply = generate_reply_with_custom_input(user_input, similar_resolution)
                 print(f"\nAI Response with User Input:\n{ai_reply}")
 
@@ -310,7 +314,7 @@ while True:
             click_reply_or_reply_all(driver)
             type_reply_in_iframe(driver, ai_reply)
 
-            exit_after_reply = input("Type 'exit' to return to the requests page or 'quit' to end the session: ").strip()
+            exit_after_reply = input(f"Type '{RED}exit{RESET}' to return to the requests page or '{RED}quit{RESET}' to end the session: ").strip()
 
             if exit_after_reply.lower() == 'quit':
                 print("Exiting the system.")
