@@ -51,6 +51,19 @@ def generate_reply_with_llama(summarized_thread, similar_resolution):
     else:
         return result
 
+def generate_reply_with_custom_input(user_input, similar_resolution):
+    prompt = (
+        f"You are an IT Assistant. The user provided the following input: '{user_input}'. "
+        f"Please complete the response professionally. Do not include greetings, sign-offs, or explanations. "
+        f"Generate a solution to the issue based on the input.\n\n"
+        f"Similar Past Resolution (if applicable): {similar_resolution}\n"
+    )
+    result = model.invoke(input=prompt)
+    if isinstance(result, dict):
+        return result.get("text", "No response generated.")
+    else:
+        return result
+
 def scrape_subject(driver):
     try:
         subject = WebDriverWait(driver, 15).until(
@@ -278,10 +291,22 @@ while True:
             # Generate AI response
             ai_reply = generate_reply_with_llama(summarized_thread, similar_resolution)
             print(f"\nAI Response:\n{ai_reply}")
-
-            similarity_score = compare_ai_response_to_resolution(ai_reply, similar_resolution,df)
+            similarity_score = compare_ai_response_to_resolution(ai_reply, similar_resolution, df)
             print(f"{GREEN}AI Response Similarity Score: {similarity_score:.2f}%{RESET}")
 
+            # Ask user if they want to use the AI-generated response
+            user_choice = input("Do you want to use the AI-generated response? (yes/no): ").strip().lower()
+
+            if user_choice == 'yes':
+                similarity_score = compare_ai_response_to_resolution(ai_reply, similar_resolution, df)
+                print(f"{GREEN}AI Response Similarity Score: {similarity_score:.2f}%{RESET}")
+            elif user_choice == 'no':
+                # If no, allow the user to input a sentence or keywords, and AI completes the response
+                user_input = input("Please enter your input, and the AI will complete it: ").strip()
+                ai_reply = generate_reply_with_custom_input(user_input, similar_resolution)
+                print(f"\nAI Response with User Input:\n{ai_reply}")
+
+            # Proceed to type the final response into the ticket system
             click_reply_or_reply_all(driver)
             type_reply_in_iframe(driver, ai_reply)
 
