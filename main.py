@@ -10,10 +10,15 @@ from selenium.webdriver.support import expected_conditions as EC
 from transformers import BartForConditionalGeneration, BartTokenizer
 from dotenv import load_dotenv
 from langchain_ollama import OllamaLLM
-from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_ticket
+from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_ticket, compare_ai_response_to_resolution
 from selenium.webdriver.common.keys import Keys
 
-# Set up LLaMA model
+
+#ansi colours
+GREEN = "\033[92m"
+RESET = "\033[0m"  
+
+
 model = OllamaLLM(model="llama3.2")
 
 def load_bart_model():
@@ -134,7 +139,6 @@ def open_closed_elements(driver):
 
 def click_reply_or_reply_all(driver):
     try:
-        # Try to find and click the "Reply All" button
         reply_all_button = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.XPATH, "//button[contains(@class, 'new-inc-btn') and .//span[text()='Reply All']]"))
         )
@@ -146,7 +150,6 @@ def click_reply_or_reply_all(driver):
         print("Reply All button not found, trying Reply...")
 
         try:
-            # Try to find and click the "Reply" button
             reply_button = WebDriverWait(driver, 15).until(
                 EC.presence_of_element_located((By.XPATH, "//button[contains(@class, 'new-inc-btn') and .//span[text()='Reply']]"))
             )
@@ -157,7 +160,6 @@ def click_reply_or_reply_all(driver):
         except Exception as e:
             print(f"Neither 'Reply' nor 'Reply All' button could be found: {e}")
 
-# Load environment variables
 load_dotenv()
 
 current_directory = os.getcwd()
@@ -168,7 +170,6 @@ driver = webdriver.Chrome(service=service)
 driver.get("https://ask2lit.lassonde.yorku.ca/app/itdesk/ui/requests")
 time.sleep(5)
 
-# Log into the platform
 email = os.getenv("LOGIN_EMAIL")
 password = os.getenv("LOGIN_PASSWORD")
 
@@ -194,7 +195,6 @@ def scrape_tickets(driver):
     ticket_rows = driver.find_elements(By.XPATH, "//tr[contains(@class, 'sdpTable requestlistview_row')]")
     return ticket_rows
 
-# Main loop
 while True:
     try:
         ticket_rows = scrape_tickets(driver)
@@ -222,7 +222,6 @@ while True:
     else:
         print("No rows found.")
 
-    # Input for ticket number or exit
     ticket_to_ans = input("\nEnter the ticket number you would like the AI to reply to or type 'exit' to quit: ").strip()
 
     if ticket_to_ans.lower() == "exit":
@@ -270,20 +269,23 @@ while True:
             bart_model, bart_tokenizer = load_bart_model()
             summarized_thread = summarize_thread(cleaned_thread, bart_model, bart_tokenizer)
 
+            # Load ticket data for similarity check
             df = load_ticket_data('resolved_tickets.csv')
             tfidf_matrix, vectorizer = vectorize_subjects(df)
+            
+            # Find the most similar ticket based on the subject
             _, similar_resolution = find_similar_ticket(subject, tfidf_matrix, df, vectorizer)
 
+            # Generate AI response
             ai_reply = generate_reply_with_llama(summarized_thread, similar_resolution)
             print(f"\nAI Response:\n{ai_reply}")
 
-            # Attempt to click Reply All or Reply button
-            click_reply_or_reply_all(driver)
+            similarity_score = compare_ai_response_to_resolution(ai_reply, similar_resolution,df)
+            print(f"{GREEN}AI Response Similarity Score: {similarity_score:.2f}%{RESET}")
 
-            # Type the reply inside the iframe
+            click_reply_or_reply_all(driver)
             type_reply_in_iframe(driver, ai_reply)
 
-            # Ask if user wants to go back to requests page
             exit_after_reply = input("Type 'exit' to return to the requests page or 'quit' to end the session: ").strip()
 
             if exit_after_reply.lower() == 'quit':
@@ -291,9 +293,8 @@ while True:
                 driver.quit()
                 break
             elif exit_after_reply.lower() == 'exit':
-                # Navigate back to requests page
                 driver.get("https://ask2lit.lassonde.yorku.ca/app/itdesk/ui/requests")
-                ticket_rows = scrape_tickets(driver)  # Re-scrape the tickets
+                ticket_rows = scrape_tickets(driver)  
 
     except Exception as e:
         print(f"Error: Could not navigate to ticket {ticket_to_ans} or scrape the data. {e}")
