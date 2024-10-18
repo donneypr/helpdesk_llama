@@ -273,7 +273,6 @@ while True:
             df = load_ticket_data('resolved_tickets.csv')
             tfidf_matrix, vectorizer = vectorize_subjects(df)
             
-            # Find the most similar ticket based on the subject
             _, similar_resolution = find_similar_ticket(subject, tfidf_matrix, df, vectorizer)
 
             # Generate AI response
