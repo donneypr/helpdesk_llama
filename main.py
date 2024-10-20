@@ -60,7 +60,7 @@ def generate_reply_with_custom_input(user_input, similar_resolution):
         f"You are an IT Assistant. The user provided the following input: '{user_input}'. "
         f"Please complete the response professionally. Do not include greetings, sign-offs, or explanations. "
         f"Generate a solution to the issue based on the input.\n\n"
-        f"Similar Past Resolution (if applicable): {similar_resolution}\n"
+        f"Mention things from the email thread to make it related to the topic of conversation: {summarized_thread}\n"
     )
     result = model.invoke(input=prompt)
     if isinstance(result, dict):
