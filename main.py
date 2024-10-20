@@ -58,9 +58,9 @@ def generate_reply_with_llama(summarized_thread, similar_resolution):
 def generate_reply_with_custom_input(user_input, similar_resolution):
     prompt = (
         f"You are an IT Assistant. The user provided the following input: '{user_input}'. "
-        f"Please complete the response professionally. Do not include greetings, sign-offs, or explanations. "
-        f"Generate a solution to the issue based on the input.\n\n"
-        f"Mention things from the email thread to make it related to the topic of conversation: {summarized_thread}\n"
+        f"Based on the input and the following context: '{summarized_thread}', "
+        f"please complete a professional response. "
+        f"Do not include greetings, sign-offs, or explanations."
     )
     result = model.invoke(input=prompt)
     if isinstance(result, dict):
@@ -129,7 +129,7 @@ def clean_text_for_ai(text):
             seen_lines.add(line_lower)
             cleaned_lines.append(line.strip())
     cleaned_text = "\n".join(cleaned_lines)
-    cleaned_text = re.sub(r"(Hello,)+", "Danielle,", cleaned_text)
+    cleaned_text = re.sub(r"(Hello,)+", "Regards,", cleaned_text)
     cleaned_text = re.sub(r"(Thank you,)+", "Thank you,", cleaned_text)
     return cleaned_text.strip()
 
