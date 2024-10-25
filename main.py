@@ -1,6 +1,7 @@
 import os
 import time
 import re
+import pickle
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -9,19 +10,17 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from transformers import BartForConditionalGeneration, BartTokenizer
 from dotenv import load_dotenv
-from langchain_ollama import OllamaLLM
+from langchain_ollama import OllamaLLM  # Assuming this is installed or custom
 from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_ticket, compare_ai_response_to_resolution
 from selenium.webdriver.common.keys import Keys
 
 
-#ansi colours declarations
+# ANSI colors declarations
 GREEN = "\033[92m"
 RESET = "\033[0m"  
 YELLOW = "\033[33m"
 BRIGHTMAGENTA = "\033[95m"
 RED = "\033[91m"
-
-
 
 model = OllamaLLM(model="llama3.2")
 
@@ -286,31 +285,26 @@ while True:
             bart_model, bart_tokenizer = load_bart_model()
             summarized_thread = summarize_thread(cleaned_thread, bart_model, bart_tokenizer)
 
-            # Load ticket data for similarity check
             df = load_ticket_data('resolved_tickets.csv')
             tfidf_matrix, vectorizer = vectorize_subjects(df)
             
             _, similar_resolution = find_similar_ticket(subject, tfidf_matrix, df, vectorizer)
 
-            # Generate AI response
             ai_reply = generate_reply_with_llama(summarized_thread, similar_resolution)
             print(f"\nAI Response:\n{ai_reply}")
             similarity_score = compare_ai_response_to_resolution(ai_reply, similar_resolution, df)
             print(f"{GREEN}AI Response Similarity Score: {similarity_score:.2f}%{RESET}")
 
-            # Ask user if they want to use the AI-generated response
             user_choice = input(f"{BRIGHTMAGENTA}Do you want to use the AI-generated response? (yes/no): {RESET}").strip().lower()
 
             if user_choice == 'yes':
                 similarity_score = compare_ai_response_to_resolution(ai_reply, similar_resolution, df)
                 print(f"{GREEN}AI Response Similarity Score: {similarity_score:.2f}%{RESET}")
             elif user_choice == 'no':
-                # If no, allow the user to input a sentence or keywords, and AI completes the response
                 user_input = input(f"{YELLOW}Please enter your input, and the AI will complete it: {RESET}").strip()
                 ai_reply = generate_reply_with_custom_input(user_input, similar_resolution)
                 print(f"\nAI Response with User Input:\n{ai_reply}")
 
-            # Proceed to type the final response into the ticket system
             click_reply_or_reply_all(driver)
             type_reply_in_iframe(driver, ai_reply)
 
