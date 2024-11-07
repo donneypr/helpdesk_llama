@@ -2,8 +2,6 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
-#cleanup the similarity score to increase similarity
-## Plan to implement SQLite for .csv and Redis for caching later.
 
 def load_ticket_data(resolved_tickets):
     df = pd.read_csv(resolved_tickets)
