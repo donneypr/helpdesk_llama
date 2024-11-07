@@ -10,12 +10,11 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from transformers import BartForConditionalGeneration, BartTokenizer
 from dotenv import load_dotenv
-from langchain_ollama import OllamaLLM  # Assuming this is installed or custom
+from langchain_ollama import OllamaLLM  
 from tfidf_similarity import load_ticket_data, vectorize_subjects, find_similar_ticket, compare_ai_response_to_resolution
 from selenium.webdriver.common.keys import Keys
 
 
-# ANSI colors declarations
 GREEN = "\033[92m"
 RESET = "\033[0m"  
 YELLOW = "\033[33m"
